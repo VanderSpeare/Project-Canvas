@@ -1,4 +1,6 @@
 1. Data Processing (src/data_processor.py)
+<img width="612" height="783" alt="image" src="https://github.com/user-attachments/assets/17ad2037-d655-4af0-8d80-d53994b654cf" />
+
 NOTE
 <img width="1056" height="812" alt="7c3c401e-eb6f-44ee-a0f5-428a7d4d4534" src="https://github.com/user-attachments/assets/1f273c02-abe1-4aa1-9051-29d915350853" />
 
