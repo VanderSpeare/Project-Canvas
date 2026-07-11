@@ -1,4 +1,12 @@
 1. Data Processing (src/data_processor.py)
+2. TO RUN:
+cd dengue-prediction 
+streamlit run src/dashboard.py
+
+
+4. <img width="1512" height="898" alt="image" src="https://github.com/user-attachments/assets/2efaa35d-a070-41fd-ad86-b4d53b7effe3" />
+<img width="1815" height="915" alt="image" src="https://github.com/user-attachments/assets/f4bd6b02-c33e-4322-95c4-8476eed3daa2" />
+
 <img width="612" height="783" alt="image" src="https://github.com/user-attachments/assets/17ad2037-d655-4af0-8d80-d53994b654cf" />
 
 NOTE
