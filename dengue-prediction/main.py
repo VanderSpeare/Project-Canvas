@@ -1,68 +1,90 @@
-import os
 import sys
 import pandas as pd
-import subprocess
 
 # Set stdout to UTF-8
 sys.stdout.reconfigure(encoding='utf-8')
 
-from src.data_processor import load_and_process_new_data
-from src.model import train_model, predict_future
-from src.gis_mapper import create_map_data
+try:
+    from . import paths
+    from .data_processor import load_and_process_new_data
+    from .model import train_model, predict_future
+    from .gis_mapper import create_map_data
+except ImportError:
+    import paths
+    from data_processor import load_and_process_new_data
+    from model import train_model, predict_future
+    from gis_mapper import create_map_data
+
+# Number of trailing months of history to feed predict_future so it can
+# compute real lag_1/lag_2 features instead of falling back to 0.
+LAG_MONTHS_NEEDED = 3
+
 
 def main():
     print("🚀 Starting Dengue Outbreak Processing Pipeline...")
-    
-    # 1. Process Raw Data
-    raw_file = 'data/raw/historical_patients.xlsx'
-    pop_file = 'data/population/vnm_admpop_adm1_2024.csv'
-    
-    if not os.path.exists(raw_file):
-        print(f"❌ Raw file {raw_file} not found. Please place the patient data there.")
+
+    if not paths.RAW_DATA_FILE.exists():
+        print(f"❌ Raw file {paths.RAW_DATA_FILE} not found. Please place the patient data there.")
         return
-        
+
     print("\n--- 1. Processing Data ---")
-    new_data = load_and_process_new_data(raw_file, pop_file)
-    
+    new_data = load_and_process_new_data(paths.RAW_DATA_FILE, paths.POP_DATA_FILE)
+
     if new_data.empty:
         print("❌ No data processed.")
         return
-        
+
     print(f"✅ Processed {len(new_data)} aggregated records.")
-    
+
     # Save to processed folder
-    os.makedirs('data/processed', exist_ok=True)
-    hist_path = 'data/processed/historical.csv'
-    new_data.to_csv(hist_path, index=False)
-    
+    paths.PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+    new_data.to_csv(paths.HISTORICAL_CSV, index=False)
+
     # 2. Train Model and Predict
     print("\n--- 2. Training Predictive Model ---")
-    model = train_model(new_data)
-    
-    if model:
+    model_bundle = train_model(new_data)
+
+    map_df = new_data
+    if model_bundle:
         print("\n--- 3. Generating Predictions ---")
-        # Predict for next month based on latest month's data
+
+        # Use the last few months of data per province, not just the single
+        # latest month, so the model can compute real lag features instead
+        # of treating missing history as 0.
+        unique_dates = sorted(new_data['date'].unique())
+        cutoff_dates = unique_dates[-LAG_MONTHS_NEEDED:]
+        recent_history = new_data[new_data['date'].isin(cutoff_dates)]
+
+        predictions = predict_future(model_bundle, recent_history)
+
         latest_date = new_data['date'].max()
         latest_data_subset = new_data[new_data['date'] == latest_date]
-        
-        predictions = predict_future(model, latest_data_subset)
-        
+
         # Merge predictions back for mapping
         map_df = pd.merge(
-            latest_data_subset, 
-            predictions[['province', 'predicted_cases']], 
-            on='province', 
+            latest_data_subset,
+            predictions[['province', 'predicted_cases']],
+            on='province',
             how='left'
         )
+
+        # Persist predictions so the dashboard can show the forecast too -
+        # previously predicted_cases only ever reached the GeoJSON export
+        # and was never saved anywhere the dashboard could read it.
+        predictions_out = predictions[['province', 'year', 'month', 'predicted_cases']].copy()
+        predictions_path = paths.PROCESSED_DIR / 'latest_predictions.csv'
+        predictions_out.to_csv(predictions_path, index=False)
+        print(f"✅ Predictions saved to {predictions_path}")
     else:
-        map_df = new_data
-        
+        print("⚠️  Skipping predictions - not enough historical data to train a model yet.")
+
     # 3. GIS Mapping
     print("\n--- 4. Creating GIS GeoJSON ---")
-    create_map_data(map_df, boundary_file='data/population/vietnam_34_provinces_2025.geojson')
-    
+    create_map_data(map_df)
+
     print("\n🎉 Pipeline Complete! To run the dashboard, use:")
     print("streamlit run src/dashboard.py")
-    
+
+
 if __name__ == "__main__":
     main()
